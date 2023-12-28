@@ -10,8 +10,11 @@ import {
 } from "@/atoms";
 import axios from "axios";
 import { useAtom } from "jotai";
-import React, { useEffect, useState } from "react";
-import { Run } from "openai/resources/beta/threads/runs/runs.mjs";
+import React, { use, useEffect, useState } from "react";
+import {
+  Run,
+  RunSubmitToolOutputsParams,
+} from "openai/resources/beta/threads/runs/runs.mjs";
 import toast from "react-hot-toast";
 import { ThreadMessage } from "openai/resources/beta/threads/messages/messages.mjs";
 import { Button } from "./ui/button";
@@ -36,6 +39,11 @@ function Run() {
       if (pollingIntervalId) clearInterval(pollingIntervalId);
     };
   }, [pollingIntervalId]);
+
+  useEffect(() => {
+    if (!run) return;
+    startPolling(run.id);
+  }, [run]);
 
   const startPolling = (runId: string) => {
     if (!thread) return;
@@ -110,6 +118,11 @@ function Run() {
               new Date(a.created_at).getTime() -
               new Date(b.created_at).getTime()
           );
+
+          // Only add user messages and not function calls
+          newMessages = newMessages.filter(
+            (message) => message.role === "user"
+          );
           setMessages(newMessages);
         });
     } catch (error) {
@@ -120,68 +133,85 @@ function Run() {
 
   const handleSubmitAction = async () => {
     setStockPrices([]);
-    run?.required_action?.submit_tool_outputs.tool_calls.forEach(
-      (toolCall, index) => {
-        console.log(`toolCall ${index}`, toolCall);
-        if (toolCall.function.name === "getStockInfo") {
-          const { symbol, logoURL, success, errorMessage } = JSON.parse(
-            toolCall.function.arguments
-          );
-          if (!success || errorMessage) {
-            toast.error(
-              errorMessage ?? "Something went wrong fetching data for stocks",
-              { position: "bottom-center" }
-            );
-          }
-          if (!symbol) {
-            toast.error("No symbol found", { position: "bottom-center" });
-          }
+    const toolOutputs: RunSubmitToolOutputsParams.ToolOutput[] = [];
 
-          axios
-            .get<{
-              price: number | null;
-              success: boolean;
-              error?: string;
-            }>(`/api/stock?symbol=${symbol}`)
-            .then((resp) => {
-              const { error, success, price } = resp.data;
-              if (!success || error || !price) {
-                toast.error(error ?? "Something went wrong fetching stock", {
-                  position: "bottom-center",
-                });
-                return;
-              }
-
-              const newStockPrice = {
-                symbol,
-                logoURL: logoURL ?? "",
-                price,
-              };
-
-              console.log("new stock price", newStockPrice);
-
-              setStockPrices((prev) => [...prev, newStockPrice]);
-
-              // TODO: Call submitToolsOutput
-              // https://platform.openai.com/docs/api-reference/runs
-              // https://platform.openai.com/docs/api-reference/runs/modifyRun
-              /**
-               * When a run has the status: "requires_action" and required_action.type
-               * is submit_tool_outputs, this endpoint can be used to submit the outputs
-               * from the tool calls once they're all completed. All outputs must
-               * be submitted in a single request.
-               */
-            })
-            .catch((err) => {
-              console.error("Error fetching stock price", err);
-            });
-        } else {
-          throw new Error(
-            `Unknown tool call function: ${toolCall.function.name}`
+    for (const toolCall of run?.required_action?.submit_tool_outputs
+      .tool_calls ?? []) {
+      console.log(`toolCall`, toolCall);
+      if (toolCall.function.name === "getStockInfo") {
+        const { symbol, logoURL, success, errorMessage } = JSON.parse(
+          toolCall.function.arguments
+        );
+        if (!success || errorMessage) {
+          toast.error(
+            errorMessage ?? "Something went wrong fetching data for stocks",
+            { position: "bottom-center" }
           );
         }
+        if (!symbol) {
+          toast.error("No symbol found", { position: "bottom-center" });
+        }
+
+        try {
+          const response = await axios.get<{
+            price: number | null;
+            success: boolean;
+            error?: string;
+          }>(`/api/stock?symbol=${symbol}`);
+
+          const { error, success, price } = response.data;
+          if (!success || error || !price) {
+            toast.error(error ?? "Something went wrong fetching stock", {
+              position: "bottom-center",
+            });
+            return;
+          }
+
+          const newStockPrice = {
+            symbol,
+            logoURL: logoURL ?? "",
+            price,
+          };
+
+          console.log("new stock price", newStockPrice);
+
+          toolOutputs.push({
+            tool_call_id: toolCall.id,
+            output: JSON.stringify(newStockPrice),
+          });
+
+          setStockPrices((prev) => [...prev, newStockPrice]);
+        } catch (error) {
+          console.log("Error fetching stock", error);
+          toast.error("Error fetching stock", { position: "bottom-center" });
+        }
+      } else {
+        throw new Error(
+          `Unknown tool call function: ${toolCall.function.name}`
+        );
       }
-    );
+    }
+
+    console.log("toolOutputs", toolOutputs);
+    if (toolOutputs.length > 0) {
+      const response = await axios.post<{ run: Run; success: boolean }>(
+        "/api/run/submit-tool-output",
+        {
+          runId: run?.id,
+          threadId: thread?.id,
+          toolOutputs: toolOutputs,
+        }
+      );
+
+      console.log("Response data from submit tool output", response.data);
+
+      if (response.data.success) {
+        toast.success("Submitted action", { position: "bottom-center" });
+        setRun(response.data.run);
+      } else {
+        toast.success("Submitted action", { position: "bottom-center" });
+      }
+    }
   };
 
   return (

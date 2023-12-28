@@ -62,13 +62,19 @@ function ChatContainer() {
         { message: message, threadId: thread.id }
       );
 
-      const newMessage = response.data.message;
-      console.log("newMessage", newMessage);
-      setMessages([...messages, newMessage]);
-      setMessage("");
-      toast.success("Successfully sent message", {
-        position: "bottom-center",
-      });
+      console.log("response", response);
+
+      const newMessage: ThreadMessage | undefined = response.data.message;
+
+      // Only add user messages and not function calls
+      if (newMessage && newMessage.role === "user") {
+        console.log("newMessage", newMessage);
+        setMessages([...messages, newMessage]);
+        setMessage("");
+        toast.success("Successfully sent message", {
+          position: "bottom-center",
+        });
+      }
     } catch (error) {
       console.log("error", error);
       toast.error("Error sending message", { position: "bottom-center" });

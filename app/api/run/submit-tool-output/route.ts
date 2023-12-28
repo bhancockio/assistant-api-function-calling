@@ -8,6 +8,8 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "No thread id provided" }, { status: 400 });
   if (!runId)
     return Response.json({ error: "No run id provided" }, { status: 400 });
+  if (!toolOutputs)
+    return Response.json({ error: "No toolOutputs provided" }, { status: 400 });
 
   const openai = new OpenAI();
 
@@ -15,14 +17,14 @@ export async function POST(req: NextRequest) {
     const run = await openai.beta.threads.runs.submitToolOutputs(
       threadId,
       runId,
-      toolOutputs
+      { tool_outputs: toolOutputs }
     );
 
-    console.log(run);
+    console.log("run in submit tool output", run);
 
-    return Response.json({ run: run });
+    return Response.json({ run: run, success: true });
   } catch (e) {
-    console.log(e);
-    return Response.json({ error: e });
+    console.log("Error in submit tool output", e);
+    return Response.json({ error: e, success: false });
   }
 }
