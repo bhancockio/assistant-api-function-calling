@@ -28,11 +28,14 @@ function Run() {
   const [runState, setRunState] = useAtom(runStateAtom);
   const [, setStockPrices] = useAtom(stockPricesAtom);
 
+  console.log("run", run);
+
   // State
   const [creating, setCreating] = useState(false);
   const [pollingIntervalId, setPollingIntervalId] =
     useState<NodeJS.Timeout | null>(null);
 
+  // Polling logic
   useEffect(() => {
     // Clean up polling on unmount
     return () => {
@@ -41,7 +44,7 @@ function Run() {
   }, [pollingIntervalId]);
 
   useEffect(() => {
-    if (!run) return;
+    if (!run || run.status === "completed") return;
     startPolling(run.id);
   }, [run]);
 
@@ -76,31 +79,6 @@ function Run() {
     setPollingIntervalId(intervalId);
   };
 
-  const handleCreate = async () => {
-    if (!assistant || !thread) return;
-
-    setCreating(true);
-    try {
-      const response = await axios.get<{ run: Run }>(
-        `/api/run/create?threadId=${thread.id}&assistantId=${assistant.id}`
-      );
-
-      const newRun = response.data.run;
-      setRunState(newRun.status);
-      setRun(newRun);
-      toast.success("Run created", { position: "bottom-center" });
-      localStorage.setItem("run", JSON.stringify(newRun));
-
-      // Start polling after creation
-      startPolling(newRun.id);
-    } catch (error) {
-      toast.error("Error creating run.", { position: "bottom-center" });
-      console.error(error);
-    } finally {
-      setCreating(false);
-    }
-  };
-
   const fetchMessages = async () => {
     if (!thread) return;
 
@@ -131,6 +109,35 @@ function Run() {
     }
   };
 
+  const handleCreate = async () => {
+    if (!assistant || !thread) return;
+
+    setCreating(true);
+    try {
+      const response = await axios.get<{ run: Run }>(
+        `/api/run/create?threadId=${thread.id}&assistantId=${assistant.id}`
+      );
+
+      const newRun = response.data.run;
+      setRunState(newRun.status);
+      setRun(newRun);
+      toast.success("Run created", { position: "bottom-center" });
+      localStorage.setItem("run", JSON.stringify(newRun));
+
+      // Start polling after creation
+      startPolling(newRun.id);
+    } catch (error) {
+      toast.error("Error creating run.", { position: "bottom-center" });
+      console.error(error);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  // Example tool calls: [TSLA, MSFT, AAPL]
+  // Goal: Fetch stock prices for each symbol
+  //       Populate toolOutputs with all of the new stock prices [TSLA: 100, MSFT : 150, AAPL]
+  //       Submit toolOutputs to the run in  a single request
   const handleSubmitAction = async () => {
     setStockPrices([]);
     const toolOutputs: RunSubmitToolOutputsParams.ToolOutput[] = [];

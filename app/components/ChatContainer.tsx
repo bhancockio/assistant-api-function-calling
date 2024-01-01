@@ -10,8 +10,6 @@ function ChatContainer() {
   const [thread] = useAtom(threadAtom);
   const [messages, setMessages] = useAtom(messagesAtom);
 
-  console.log("messages", messages);
-
   // State
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -19,11 +17,10 @@ function ChatContainer() {
 
   useEffect(() => {
     const fetchMessages = async () => {
-      setFetching(true);
       if (!thread) {
-        setFetching(false);
         return;
       }
+      setFetching(true);
 
       try {
         axios
@@ -34,11 +31,14 @@ function ChatContainer() {
             let newMessages = response.data.messages;
 
             // Sort messages in descending order by createdAt
-            newMessages = newMessages.sort(
-              (a, b) =>
-                new Date(a.created_at).getTime() -
-                new Date(b.created_at).getTime()
-            );
+            newMessages = newMessages
+              .sort(
+                (a, b) =>
+                  new Date(a.created_at).getTime() -
+                  new Date(b.created_at).getTime()
+              )
+              .filter((message) => message.role === "user");
+
             setMessages(newMessages);
           });
       } catch (error) {
@@ -50,7 +50,7 @@ function ChatContainer() {
     };
 
     fetchMessages();
-  }, [thread]);
+  }, [setMessages, thread]);
 
   const sendMessage = async () => {
     if (!thread) return;
@@ -58,7 +58,7 @@ function ChatContainer() {
 
     try {
       const response = await axios.post<{ message: ThreadMessage }>(
-        `/api/message/create?threadId=${thread.id}&message=${message}`,
+        `/api/message/create`,
         { message: message, threadId: thread.id }
       );
 

@@ -10,8 +10,7 @@ import { Button } from "./ui/button";
 
 function Assistant() {
   // Atom State
-  const [assistant, setAssistant] = useAtom(assistantAtom);
-  const [, setMessages] = useAtom(messagesAtom);
+  const [, setAssistant] = useAtom(assistantAtom);
 
   // State
   const [creating, setCreating] = useState(false);

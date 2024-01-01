@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
 
   if (!threadId)
     return Response.json({ error: "No thread id provided" }, { status: 400 });
+
   if (!assistantId)
     return Response.json(
       { error: "No  assistant id provided" },
